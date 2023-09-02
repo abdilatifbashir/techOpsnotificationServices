@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  kafka:
+    image: confluentinc/cp-kafka:latest
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181 # Adjust the ZooKeeper connection string
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9093
+      # KAFKA_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      # KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      # KAFKA_DELETE_TOPICS: "true"
+    
+
+    networks:
+      - app-network
+    links:
+      - zookeeper
+
+  zookeeper:
+    image: zookeeper:3.6
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - app-network
+
+  email-producer-service:
+    build:
+      context: ./emailNotificationService
+      dockerfile: Dockerfile
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
+      SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: org.springframework.kafka.support.serializer.JsonSerializer
+    ports:
+      - "7820:7820" # Map container port 8080 to host port 8080
+    networks:
+      - app-network
+
+  notification-service:
+    build:
+      context: ./notificationService
+      dockerfile: Dockerfile
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_CONSUMER_GROUP_ID: myGroup
+      SPRING_KAFKA_CONSUMER_KEY_DESERIALIZER: org.apache.kafka.common.serialization.StringDeserializer
+      SPRING_KAFKA_CONSUMER_VALUE_DESERIALIZER: org.apache.kafka.common.serialization.StringDeserializer
+      SPRING_KAFKA_LISTENER_TYPE: batch
+      SPRING_KAFKA_LISTENER_CONTAINER_CONCURRENCY: 1 # Adjust concurrency as needed
+    ports:
+      - "7821:7821" # Map container port 8080 to host port 8080
+    networks:
+      - app-network
+
+  sms-billing-service:
+    build:
+      context: ./smsBillingSystem
+      dockerfile: Dockerfile
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      SPRING_KAFKA_PRODUCER_KEY_SERIALIZER: org.apache.kafka.common.serialization.StringSerializer
+      SPRING_KAFKA_PRODUCER_VALUE_SERIALIZER: org.springframework.kafka.support.serializer.JsonSerializer
+    ports:
+      - "7815:7815" # Map container port 8080 to host port 8080
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
